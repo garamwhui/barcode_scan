@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>바코드 스캐너 (안정 버전)</title>
+  <title>바코드 스캐너 (안정 + 사진 스캔)</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -27,7 +27,7 @@
       border-radius: 12px;
       overflow: hidden;
       background: #1e293b;
-      min-height: 280px;
+      min-height: 260px;
     }
     #result-box {
       max-width: 480px;
@@ -87,6 +87,10 @@
       background: #f59e0b;
       color: #0f172a;
     }
+    .btn-green {
+      background: #22c55e;
+      color: #0f172a;
+    }
     .hint {
       text-align: center;
       font-size: 0.85rem;
@@ -115,16 +119,18 @@
       color: #fde68a;
       line-height: 1.5;
     }
+    #file-input {
+      display: none;
+    }
   </style>
 </head>
 <body>
   <h1>📱 바코드 / QR 스캐너</h1>
 
   <div class="tip">
-    <strong>작은 바코드 초점이 흐릴 때</strong><br>
-    1. 바코드를 <b>5\~8cm</b> 가까이 대세요<br>
-    2. 초점이 안 맞으면 <b>「카메라 다시 시작」</b> 버튼을 누르세요<br>
-    3. 그래도 흐리면 핸드폰을 살짝 움직였다가 다시 고정하세요
+    <strong>작은 바코드가 잘 안 읽힐 때</strong><br>
+    → 아래 <b>「사진으로 스캔」</b> 버튼을 사용하세요<br>
+    핸드폰 기본 카메라로 선명하게 찍은 뒤 선택하면 잘 읽힙니다
   </div>
   
   <div id="reader"></div>
@@ -136,50 +142,67 @@
     <button class="btn" id="rescanBtn">다시 스캔하기</button>
   </div>
 
-  <button class="btn btn-warning" id="refocusBtn" style="display:none;">카메라 다시 시작 (초점 재설정)</button>
+  <!-- 카메라 사용 중 버튼들 -->
+  <button class="btn btn-green" id="photoBtn">사진으로 스캔 (작은 바코드 추천)</button>
+  <button class="btn btn-warning" id="refocusBtn" style="display:none;">카메라 다시 시작</button>
   <button class="btn btn-secondary" id="torchBtn" style="display:none;">플래시 켜기/끄기</button>
 
+  <input type="file" id="file-input" accept="image/*" capture="environment">
+
   <p class="hint">
-    후방 카메라 · 고해상도 모드<br>
-    초점이 흐리면 「카메라 다시 시작」을 눌러주세요
+    실시간 카메라 스캔 + 사진 스캔 지원<br>
+    작은 바코드는 「사진으로 스캔」을 사용하세요
   </p>
 
   <script>
     let html5QrCode = null;
     let isScanning = false;
     let torchOn = false;
-    let isStarting = false;
+    let isBusy = false;
 
-    // 결과 화면에서 「다시 스캔하기」 버튼
+    // 버튼 이벤트
     document.getElementById("rescanBtn").addEventListener("click", () => {
-      restartScanner();
+      startCameraScan();
     });
 
-    // 초점 재설정 버튼
     document.getElementById("refocusBtn").addEventListener("click", () => {
-      restartScanner();
+      startCameraScan();
     });
 
-    // 플래시 버튼
     document.getElementById("torchBtn").addEventListener("click", () => {
       toggleTorch();
     });
 
-    function onScanSuccess(decodedText, decodedResult) {
+    document.getElementById("photoBtn").addEventListener("click", () => {
+      document.getElementById("file-input").click();
+    });
+
+    document.getElementById("file-input").addEventListener("change", (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        scanFromFile(e.target.files[0]);
+      }
+    });
+
+    function onScanSuccess(decodedText) {
       if (!isScanning) return;
       isScanning = false;
 
-      // 스캐너 중지 후 결과 화면으로 전환
-      stopScanner().then(() => {
-        document.getElementById("reader").style.display = "none";
-        document.getElementById("refocusBtn").style.display = "none";
-        document.getElementById("torchBtn").style.display = "none";
-        document.getElementById("result-box").style.display = "block";
-        document.getElementById("decoded-text").textContent = decodedText;
-        document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
-
-        fetchProductInfo(decodedText);
+      stopCamera().then(() => {
+        showResult(decodedText);
       });
+    }
+
+    function showResult(decodedText) {
+      document.getElementById("reader").style.display = "none";
+      document.getElementById("refocusBtn").style.display = "none";
+      document.getElementById("torchBtn").style.display = "none";
+      document.getElementById("photoBtn").style.display = "none";
+
+      document.getElementById("result-box").style.display = "block";
+      document.getElementById("decoded-text").textContent = decodedText;
+      document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
+
+      fetchProductInfo(decodedText);
     }
 
     async function fetchProductInfo(barcode) {
@@ -260,70 +283,68 @@
     }
 
     // 카메라 완전히 중지
-    function stopScanner() {
+    function stopCamera() {
       return new Promise((resolve) => {
-        if (html5QrCode && isScanning) {
-          html5QrCode.stop()
-            .then(() => {
-              html5QrCode.clear();
-              html5QrCode = null;
-              isScanning = false;
-              resolve();
-            })
-            .catch(() => {
-              html5QrCode = null;
-              isScanning = false;
-              resolve();
-            });
-        } else {
-          if (html5QrCode) {
-            try { html5QrCode.clear(); } catch(e) {}
-            html5QrCode = null;
-          }
+        if (!html5QrCode) {
           isScanning = false;
           resolve();
+          return;
         }
+
+        html5QrCode.stop()
+          .then(() => {
+            try { html5QrCode.clear(); } catch(e) {}
+            html5QrCode = null;
+            isScanning = false;
+            resolve();
+          })
+          .catch(() => {
+            try { html5QrCode.clear(); } catch(e) {}
+            html5QrCode = null;
+            isScanning = false;
+            resolve();
+          });
       });
     }
 
-    // 스캐너 시작
-    async function startScanner() {
-      if (isStarting) return;
-      isStarting = true;
-
-      // 기존 카메라 완전히 종료
-      await stopScanner();
-
-      // UI 초기화
-      document.getElementById("reader").innerHTML = "";
-      document.getElementById("reader").style.display = "block";
-      document.getElementById("result-box").style.display = "none";
-      document.getElementById("refocusBtn").style.display = "block";
-      document.getElementById("torchBtn").style.display = "none";
-      torchOn = false;
-
-      // 잠시 대기 (카메라 리소스 해제 시간)
-      await new Promise(r => setTimeout(r, 300));
-
-      html5QrCode = new Html5Qrcode("reader");
-      isScanning = true;
-
-      const config = {
-        fps: 15,
-        qrbox: { width: 220, height: 110 },
-        aspectRatio: 1.777,
-        disableFlip: false,
-        experimentalFeatures: {
-          useBarCodeDetectorIfSupported: true
-        },
-        videoConstraints: {
-          facingMode: "environment",
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        }
-      };
+    // 실시간 카메라 스캔 시작
+    async function startCameraScan() {
+      if (isBusy) return;
+      isBusy = true;
 
       try {
+        // 기존 카메라 종료
+        await stopCamera();
+
+        // UI 초기화
+        document.getElementById("reader").innerHTML = "";
+        document.getElementById("reader").style.display = "block";
+        document.getElementById("result-box").style.display = "none";
+        document.getElementById("photoBtn").style.display = "block";
+        document.getElementById("refocusBtn").style.display = "block";
+        document.getElementById("torchBtn").style.display = "none";
+        torchOn = false;
+
+        // 카메라 리소스 해제 대기 (중요)
+        await new Promise(r => setTimeout(r, 500));
+
+        html5QrCode = new Html5Qrcode("reader");
+        isScanning = true;
+
+        const config = {
+          fps: 12,
+          qrbox: { width: 240, height: 120 },
+          aspectRatio: 1.777,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true
+          },
+          videoConstraints: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        };
+
         await html5QrCode.start(
           { facingMode: "environment" },
           config,
@@ -342,33 +363,56 @@
         }, 1000);
 
       } catch (err) {
-        console.warn("고해상도 실패, 기본 설정으로 재시도:", err);
-
-        try {
-          const fallbackConfig = {
-            fps: 12,
-            qrbox: { width: 200, height: 100 },
-            aspectRatio: 1.0
-          };
-
-          await html5QrCode.start(
-            { facingMode: "environment" },
-            fallbackConfig,
-            onScanSuccess,
-            () => {}
-          );
-        } catch (err2) {
-          alert("카메라 접근에 실패했습니다.\nHTTPS 환경인지, 카메라 권한을 허용했는지 확인해 주세요.\n\n" + err2);
-          isScanning = false;
-        }
+        console.error("카메라 시작 실패:", err);
+        alert("카메라를 시작할 수 없습니다.\n페이지를 새로고침 한 뒤 다시 시도해 주세요.\n\n" + (err.message || err));
+        isScanning = false;
       }
 
-      isStarting = false;
+      isBusy = false;
     }
 
-    // 다시 스캔 / 초점 재설정
-    function restartScanner() {
-      startScanner();
+    // 사진 파일로 스캔 (작은 바코드에 효과적)
+    async function scanFromFile(file) {
+      if (isBusy) return;
+      isBusy = true;
+
+      try {
+        await stopCamera();
+
+        document.getElementById("reader").style.display = "none";
+        document.getElementById("refocusBtn").style.display = "none";
+        document.getElementById("torchBtn").style.display = "none";
+        document.getElementById("photoBtn").style.display = "none";
+        document.getElementById("result-box").style.display = "block";
+        document.getElementById("decoded-text").textContent = "사진 분석 중...";
+        document.getElementById("product-info").innerHTML = '<div class="loading">바코드를 읽는 중입니다...</div>';
+
+        // 파일 스캔용 임시 인스턴스
+        const fileScanner = new Html5Qrcode("reader");
+        
+        const decodedText = await fileScanner.scanFile(file, true);
+        
+        // 성공
+        document.getElementById("decoded-text").textContent = decodedText;
+        document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
+        fetchProductInfo(decodedText);
+
+      } catch (err) {
+        console.error("파일 스캔 실패:", err);
+        document.getElementById("decoded-text").textContent = "인식 실패";
+        document.getElementById("product-info").innerHTML = `
+          <p>사진에서 바코드를 찾지 못했습니다.</p>
+          <p style="margin-top:8px; font-size:0.9rem; color:#94a3b8;">
+            • 바코드가 선명하게 나오도록 가까이서 찍어주세요<br>
+            • 빛이 충분한 곳에서 찍어주세요<br>
+            • 바코드가 기울어지지 않게 찍어주세요
+          </p>
+        `;
+      }
+
+      // 파일 input 초기화 (같은 파일 다시 선택 가능하도록)
+      document.getElementById("file-input").value = "";
+      isBusy = false;
     }
 
     function toggleTorch() {
@@ -384,9 +428,9 @@
       }
     }
 
-    // 페이지 로드 시 시작
+    // 페이지 로드 시 카메라 시작
     window.addEventListener("load", () => {
-      startScanner();
+      startCameraScan();
     });
   </script>
 </body>
