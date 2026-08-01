@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>바코드 스캐너 (작은 바코드 강화)</title>
+  <title>바코드 스캐너 (초점 개선)</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -67,7 +67,7 @@
       display: block;
       width: 100%;
       max-width: 480px;
-      margin: 12px auto 0;
+      margin: 10px auto 0;
       padding: 14px;
       background: #38bdf8;
       color: #0f172a;
@@ -81,7 +81,10 @@
     .btn-secondary {
       background: #334155;
       color: #e2e8f0;
-      margin-top: 8px;
+    }
+    .btn-warning {
+      background: #f59e0b;
+      color: #0f172a;
     }
     .hint {
       text-align: center;
@@ -103,12 +106,13 @@
     .tip {
       background: #1e293b;
       border-left: 4px solid #fbbf24;
-      padding: 10px 12px;
-      margin: 12px auto;
+      padding: 12px;
+      margin: 0 auto 14px;
       max-width: 480px;
-      font-size: 0.88rem;
+      font-size: 0.9rem;
       border-radius: 0 8px 8px 0;
       color: #fde68a;
+      line-height: 1.5;
     }
   </style>
 </head>
@@ -116,9 +120,10 @@
   <h1>📱 바코드 / QR 스캐너</h1>
 
   <div class="tip">
-    💡 <strong>작은 바코드 팁</strong><br>
-    바코드를 <b>5\~10cm</b> 가까이 대고<br>
-    화면에 크게 들어오게 한 뒤 잠깐 멈추세요
+    <strong>작은 바코드 초점이 안 맞을 때</strong><br>
+    1. 바코드를 <b>5\~8cm</b> 아주 가까이 대세요<br>
+    2. 화면에 바코드가 크게 들어오게 하세요<br>
+    3. 초점이 흐리면 아래 <b>「카메라 다시 시작」</b> 버튼을 누르세요
   </div>
   
   <div id="reader"></div>
@@ -130,11 +135,12 @@
     <button class="btn" onclick="restartScanner()">다시 스캔하기</button>
   </div>
 
+  <button class="btn btn-warning" id="refocusBtn" onclick="restartCamera()">카메라 다시 시작 (초점 재설정)</button>
   <button class="btn btn-secondary" id="torchBtn" style="display:none;" onclick="toggleTorch()">플래시 켜기/끄기</button>
 
   <p class="hint">
     후방 카메라 · 고해상도 모드<br>
-    식품 · 화장품 · 생활용품 · 반려동물용품 지원
+    초점이 흐리면 「카메라 다시 시작」을 눌러주세요
   </p>
 
   <script>
@@ -148,6 +154,7 @@
 
       html5QrCode.stop().then(() => {
         document.getElementById("reader").style.display = "none";
+        document.getElementById("refocusBtn").style.display = "none";
         document.getElementById("torchBtn").style.display = "none";
         document.getElementById("result-box").style.display = "block";
         document.getElementById("decoded-text").textContent = decodedText;
@@ -235,17 +242,23 @@
     }
 
     function startScanner() {
+      if (html5QrCode) {
+        html5QrCode.stop().catch(() => {});
+      }
+
       html5QrCode = new Html5Qrcode("reader");
       isScanning = true;
       torchOn = false;
+
       document.getElementById("reader").style.display = "block";
       document.getElementById("result-box").style.display = "none";
+      document.getElementById("refocusBtn").style.display = "block";
       document.getElementById("torchBtn").style.display = "none";
 
-      // 작은 바코드에 최적화된 설정
+      // 작은 바코드 + 가까운 초점 최적화
       const config = {
-        fps: 20,                              // 더 빠르게 인식
-        qrbox: { width: 220, height: 120 },   // 스캔 영역을 작게 → 작은 바코드에 집중
+        fps: 18,
+        qrbox: { width: 200, height: 100 },   // 더 작은 영역 → 가까이 대고 찍도록
         aspectRatio: 1.777,
         disableFlip: false,
         experimentalFeatures: {
@@ -256,8 +269,7 @@
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           advanced: [
-            { focusMode: "continuous" },
-            { focusDistance: 0.1 }            // 가까운 거리에 초점 맞추기 시도
+            { focusMode: "continuous" }
           ]
         }
       };
@@ -268,24 +280,21 @@
         onScanSuccess,
         () => {}
       ).then(() => {
-        // 플래시 지원 여부 확인
-        Html5Qrcode.getCameras().then(cameras => {
-          // 플래시 버튼 표시 시도
-          setTimeout(() => {
-            try {
-              const track = html5QrCode.getRunningTrackCameraCapabilities();
-              if (track && track.torchFeature().isSupported()) {
-                document.getElementById("torchBtn").style.display = "block";
-              }
-            } catch (e) {}
-          }, 1000);
-        });
+        // 플래시 지원 확인
+        setTimeout(() => {
+          try {
+            const caps = html5QrCode.getRunningTrackCameraCapabilities();
+            if (caps && caps.torchFeature && caps.torchFeature().isSupported()) {
+              document.getElementById("torchBtn").style.display = "block";
+            }
+          } catch (e) {}
+        }, 800);
       }).catch(err => {
         console.warn("고해상도 실패, 기본 설정으로 재시도:", err);
 
         const fallbackConfig = {
           fps: 15,
-          qrbox: { width: 200, height: 110 },
+          qrbox: { width: 180, height: 90 },
           aspectRatio: 1.0
         };
 
@@ -300,12 +309,17 @@
       });
     }
 
+    // 초점이 흐릴 때 카메라를 완전히 다시 시작
+    function restartCamera() {
+      startScanner();
+    }
+
     function toggleTorch() {
       try {
-        const track = html5QrCode.getRunningTrackCameraCapabilities();
-        if (track && track.torchFeature().isSupported()) {
+        const caps = html5QrCode.getRunningTrackCameraCapabilities();
+        if (caps && caps.torchFeature && caps.torchFeature().isSupported()) {
           torchOn = !torchOn;
-          track.torchFeature().apply(torchOn);
+          caps.torchFeature().apply(torchOn);
           document.getElementById("torchBtn").textContent = torchOn ? "플래시 끄기" : "플래시 켜기";
         }
       } catch (e) {
