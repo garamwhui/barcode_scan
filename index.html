@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>바코드 스캐너 (고해상도 + 모든 제품)</title>
+  <title>바코드 스캐너 (작은 바코드 강화)</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,14 +16,14 @@
     }
     h1 {
       text-align: center;
-      font-size: 1.35rem;
-      margin-bottom: 12px;
+      font-size: 1.3rem;
+      margin-bottom: 10px;
       color: #38bdf8;
     }
     #reader {
       width: 100%;
       max-width: 480px;
-      margin: 0 auto 16px;
+      margin: 0 auto 12px;
       border-radius: 12px;
       overflow: hidden;
       background: #1e293b;
@@ -42,7 +42,7 @@
       color: #4ade80;
     }
     .code {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 700;
       word-break: break-all;
       background: #0f172a;
@@ -62,14 +62,12 @@
       display: block;
       background: #fff;
     }
-    .product-info p {
-      margin-bottom: 6px;
-    }
+    .product-info p { margin-bottom: 6px; }
     .btn {
       display: block;
       width: 100%;
       max-width: 480px;
-      margin: 14px auto 0;
+      margin: 12px auto 0;
       padding: 14px;
       background: #38bdf8;
       color: #0f172a;
@@ -80,6 +78,11 @@
       cursor: pointer;
     }
     .btn:active { opacity: 0.85; }
+    .btn-secondary {
+      background: #334155;
+      color: #e2e8f0;
+      margin-top: 8px;
+    }
     .hint {
       text-align: center;
       font-size: 0.85rem;
@@ -97,10 +100,26 @@
       color: #64748b;
       margin-top: 10px;
     }
+    .tip {
+      background: #1e293b;
+      border-left: 4px solid #fbbf24;
+      padding: 10px 12px;
+      margin: 12px auto;
+      max-width: 480px;
+      font-size: 0.88rem;
+      border-radius: 0 8px 8px 0;
+      color: #fde68a;
+    }
   </style>
 </head>
 <body>
   <h1>📱 바코드 / QR 스캐너</h1>
+
+  <div class="tip">
+    💡 <strong>작은 바코드 팁</strong><br>
+    바코드를 <b>5\~10cm</b> 가까이 대고<br>
+    화면에 크게 들어오게 한 뒤 잠깐 멈추세요
+  </div>
   
   <div id="reader"></div>
   
@@ -111,15 +130,17 @@
     <button class="btn" onclick="restartScanner()">다시 스캔하기</button>
   </div>
 
+  <button class="btn btn-secondary" id="torchBtn" style="display:none;" onclick="toggleTorch()">플래시 켜기/끄기</button>
+
   <p class="hint">
-    후방 카메라로 바코드를 비춰주세요<br>
-    식품 · 화장품 · 생활용품 · 반려동물용품 등<br>
-    고해상도로 작은 바코드도 잘 읽습니다
+    후방 카메라 · 고해상도 모드<br>
+    식품 · 화장품 · 생활용품 · 반려동물용품 지원
   </p>
 
   <script>
     let html5QrCode;
     let isScanning = false;
+    let torchOn = false;
 
     function onScanSuccess(decodedText, decodedResult) {
       if (!isScanning) return;
@@ -127,6 +148,7 @@
 
       html5QrCode.stop().then(() => {
         document.getElementById("reader").style.display = "none";
+        document.getElementById("torchBtn").style.display = "none";
         document.getElementById("result-box").style.display = "block";
         document.getElementById("decoded-text").textContent = decodedText;
         document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
@@ -138,20 +160,16 @@
     async function fetchProductInfo(barcode) {
       const infoDiv = document.getElementById("product-info");
 
-      // 숫자 바코드가 아니면 일반 텍스트로 처리
       if (!/^\d{8,14}$/.test(barcode)) {
         infoDiv.innerHTML = "<p>일반 텍스트 또는 QR 코드입니다.<br>제품 데이터베이스에서 조회할 수 없습니다.</p>";
         return;
       }
 
       try {
-        // Open Food Facts 계열 통합 API (식품 + 화장품 + 일반제품 + 반려동물용품)
         const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}?product_type=all&fields=product_name,product_name_en,brands,quantity,categories,ingredients_text,image_front_small_url,image_url,product_type,countries,labels`;
         
         const res = await fetch(url, {
-          headers: {
-            "User-Agent": "BarcodeScannerApp/1.0 (Vercel Demo)"
-          }
+          headers: { "User-Agent": "BarcodeScannerApp/1.0 (Vercel Demo)" }
         });
 
         const data = await res.json();
@@ -160,29 +178,22 @@
           const p = data.product;
           let html = "";
 
-          // 이미지
           const img = p.image_front_small_url || p.image_url;
           if (img) {
             html += `<img src="${img}" alt="제품 이미지" onerror="this.style.display='none'">`;
           }
 
-          // 제품명
           const name = p.product_name || p.product_name_en || "이름 정보 없음";
           html += `<p><strong>제품명:</strong> ${name}</p>`;
 
-          // 브랜드
           if (p.brands) html += `<p><strong>브랜드:</strong> ${p.brands}</p>`;
-
-          // 용량/수량
           if (p.quantity) html += `<p><strong>용량/수량:</strong> ${p.quantity}</p>`;
 
-          // 카테고리
           if (p.categories) {
             const cat = p.categories.split(",")[0].trim();
             html += `<p><strong>카테고리:</strong> ${cat}</p>`;
           }
 
-          // 제품 유형
           if (p.product_type) {
             const typeMap = {
               food: "식품",
@@ -193,7 +204,6 @@
             html += `<p><strong>유형:</strong> ${typeMap[p.product_type] || p.product_type}</p>`;
           }
 
-          // 원재료/성분
           if (p.ingredients_text) {
             const short = p.ingredients_text.length > 150 
               ? p.ingredients_text.substring(0, 150) + "..." 
@@ -201,10 +211,7 @@
             html += `<p><strong>원재료/성분:</strong> ${short}</p>`;
           }
 
-          // 라벨
           if (p.labels) html += `<p><strong>라벨:</strong> ${p.labels}</p>`;
-
-          // 판매 국가
           if (p.countries) html += `<p><strong>판매 국가:</strong> ${p.countries}</p>`;
 
           html += `<div class="source">데이터 출처: Open Food / Beauty / Products Facts</div>`;
@@ -230,13 +237,15 @@
     function startScanner() {
       html5QrCode = new Html5Qrcode("reader");
       isScanning = true;
+      torchOn = false;
       document.getElementById("reader").style.display = "block";
       document.getElementById("result-box").style.display = "none";
+      document.getElementById("torchBtn").style.display = "none";
 
-      // 고해상도 + 선명도 최적화 설정
+      // 작은 바코드에 최적화된 설정
       const config = {
-        fps: 15,
-        qrbox: { width: 300, height: 180 },
+        fps: 20,                              // 더 빠르게 인식
+        qrbox: { width: 220, height: 120 },   // 스캔 영역을 작게 → 작은 바코드에 집중
         aspectRatio: 1.777,
         disableFlip: false,
         experimentalFeatures: {
@@ -247,7 +256,8 @@
           width: { ideal: 1920 },
           height: { ideal: 1080 },
           advanced: [
-            { focusMode: "continuous" }
+            { focusMode: "continuous" },
+            { focusDistance: 0.1 }            // 가까운 거리에 초점 맞추기 시도
           ]
         }
       };
@@ -257,13 +267,25 @@
         config,
         onScanSuccess,
         () => {}
-      ).catch(err => {
-        // 고해상도 실패 시 기본 설정으로 재시도
+      ).then(() => {
+        // 플래시 지원 여부 확인
+        Html5Qrcode.getCameras().then(cameras => {
+          // 플래시 버튼 표시 시도
+          setTimeout(() => {
+            try {
+              const track = html5QrCode.getRunningTrackCameraCapabilities();
+              if (track && track.torchFeature().isSupported()) {
+                document.getElementById("torchBtn").style.display = "block";
+              }
+            } catch (e) {}
+          }, 1000);
+        });
+      }).catch(err => {
         console.warn("고해상도 실패, 기본 설정으로 재시도:", err);
-        
+
         const fallbackConfig = {
-          fps: 12,
-          qrbox: { width: 280, height: 160 },
+          fps: 15,
+          qrbox: { width: 200, height: 110 },
           aspectRatio: 1.0
         };
 
@@ -276,6 +298,19 @@
           alert("카메라 접근에 실패했습니다.\nHTTPS 환경인지, 카메라 권한을 허용했는지 확인해 주세요.\n\n" + err2);
         });
       });
+    }
+
+    function toggleTorch() {
+      try {
+        const track = html5QrCode.getRunningTrackCameraCapabilities();
+        if (track && track.torchFeature().isSupported()) {
+          torchOn = !torchOn;
+          track.torchFeature().apply(torchOn);
+          document.getElementById("torchBtn").textContent = torchOn ? "플래시 끄기" : "플래시 켜기";
+        }
+      } catch (e) {
+        alert("이 기기에서는 플래시를 사용할 수 없습니다.");
+      }
     }
 
     function restartScanner() {
