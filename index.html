@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>바코드 스캐너</title>
+  <title>바코드 스캐너 (모든 제품)</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -16,7 +16,7 @@
     }
     h1 {
       text-align: center;
-      font-size: 1.4rem;
+      font-size: 1.35rem;
       margin-bottom: 12px;
       color: #38bdf8;
     }
@@ -42,13 +42,13 @@
       color: #4ade80;
     }
     .code {
-      font-size: 1.3rem;
+      font-size: 1.25rem;
       font-weight: 700;
       word-break: break-all;
       background: #0f172a;
       padding: 12px;
       border-radius: 8px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       color: #fbbf24;
     }
     .product-info {
@@ -56,16 +56,20 @@
       font-size: 0.95rem;
     }
     .product-info img {
-      max-width: 120px;
+      max-width: 140px;
       border-radius: 8px;
       margin: 8px 0;
       display: block;
+      background: #fff;
+    }
+    .product-info p {
+      margin-bottom: 6px;
     }
     .btn {
       display: block;
       width: 100%;
       max-width: 480px;
-      margin: 12px auto 0;
+      margin: 14px auto 0;
       padding: 14px;
       background: #38bdf8;
       color: #0f172a;
@@ -81,11 +85,17 @@
       font-size: 0.85rem;
       color: #94a3b8;
       margin-top: 12px;
+      line-height: 1.5;
     }
     .loading {
       text-align: center;
       color: #94a3b8;
-      padding: 8px;
+      padding: 12px 0;
+    }
+    .source {
+      font-size: 0.8rem;
+      color: #64748b;
+      margin-top: 10px;
     }
   </style>
 </head>
@@ -101,7 +111,11 @@
     <button class="btn" onclick="restartScanner()">다시 스캔하기</button>
   </div>
 
-  <p class="hint">후방 카메라로 바코드를 비춰주세요<br>제품 바코드(EAN/UPC)면 정보를 자동으로 가져옵니다</p>
+  <p class="hint">
+    후방 카메라로 바코드를 비춰주세요<br>
+    식품 · 화장품 · 생활용품 · 반려동물용품 등<br>
+    가능한 많은 제품 정보를 자동으로 찾아줍니다
+  </p>
 
   <script>
     let html5QrCode;
@@ -111,50 +125,108 @@
       if (!isScanning) return;
       isScanning = false;
 
-      // 스캐너 중지
       html5QrCode.stop().then(() => {
         document.getElementById("reader").style.display = "none";
         document.getElementById("result-box").style.display = "block";
         document.getElementById("decoded-text").textContent = decodedText;
         document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
 
-        // 제품 정보 조회 (Open Food Facts - 무료)
         fetchProductInfo(decodedText);
       }).catch(err => console.error(err));
     }
 
-    function fetchProductInfo(barcode) {
-      // 숫자만 있는 바코드일 때만 제품 조회 시도
+    async function fetchProductInfo(barcode) {
+      const infoDiv = document.getElementById("product-info");
+
+      // 숫자 바코드가 아니면 일반 텍스트로 처리
       if (!/^\d{8,14}$/.test(barcode)) {
-        document.getElementById("product-info").innerHTML = 
-          "<p>일반 텍스트/QR 코드입니다.<br>제품 정보가 없습니다.</p>";
+        infoDiv.innerHTML = "<p>일반 텍스트 또는 QR 코드입니다.<br>제품 데이터베이스에서 조회할 수 없습니다.</p>";
         return;
       }
 
-      fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
-        .then(res => res.json())
-        .then(data => {
-          const infoDiv = document.getElementById("product-info");
-          if (data.status === 1 && data.product) {
-            const p = data.product;
-            let html = "";
-            if (p.image_front_small_url || p.image_url) {
-              html += `<img src="${p.image_front_small_url || p.image_url}" alt="제품 이미지">`;
-            }
-            html += `<p><strong>제품명:</strong> ${p.product_name || p.product_name_en || "정보 없음"}</p>`;
-            if (p.brands) html += `<p><strong>브랜드:</strong> ${p.brands}</p>`;
-            if (p.quantity) html += `<p><strong>용량:</strong> ${p.quantity}</p>`;
-            if (p.categories) html += `<p><strong>카테고리:</strong> ${p.categories.split(",")[0]}</p>`;
-            if (p.ingredients_text) html += `<p><strong>원재료:</strong> ${p.ingredients_text.substring(0, 120)}...</p>`;
-            infoDiv.innerHTML = html;
-          } else {
-            infoDiv.innerHTML = "<p>제품 정보를 찾을 수 없습니다.<br>(식품이 아니거나 데이터베이스에 없을 수 있어요)</p>";
+      try {
+        // Open Food Facts 계열 통합 API (식품 + 화장품 + 일반제품 + 반려동물용품)
+        // product_type=all 로 모든 카테고리 검색
+        const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}?product_type=all&fields=product_name,product_name_en,brands,quantity,categories,ingredients_text,image_front_small_url,image_url,product_type,countries,labels`;
+        
+        const res = await fetch(url, {
+          headers: {
+            "User-Agent": "BarcodeScannerApp/1.0 (Vercel Demo)"
           }
-        })
-        .catch(() => {
-          document.getElementById("product-info").innerHTML = 
-            "<p>제품 정보 조회에 실패했습니다.<br>인터넷 연결을 확인해 주세요.</p>";
         });
+
+        const data = await res.json();
+
+        if (data.status === 1 && data.product) {
+          const p = data.product;
+          let html = "";
+
+          // 이미지
+          const img = p.image_front_small_url || p.image_url;
+          if (img) {
+            html += `<img src="${img}" alt="제품 이미지" onerror="this.style.display='none'">`;
+          }
+
+          // 제품명
+          const name = p.product_name || p.product_name_en || "이름 정보 없음";
+          html += `<p><strong>제품명:</strong> ${name}</p>`;
+
+          // 브랜드
+          if (p.brands) html += `<p><strong>브랜드:</strong> ${p.brands}</p>`;
+
+          // 용량/수량
+          if (p.quantity) html += `<p><strong>용량/수량:</strong> ${p.quantity}</p>`;
+
+          // 카테고리
+          if (p.categories) {
+            const cat = p.categories.split(",")[0].trim();
+            html += `<p><strong>카테고리:</strong> ${cat}</p>`;
+          }
+
+          // 제품 유형
+          if (p.product_type) {
+            const typeMap = {
+              food: "식품",
+              beauty: "화장품/뷰티",
+              petfood: "반려동물 식품",
+              product: "일반 제품"
+            };
+            html += `<p><strong>유형:</strong> ${typeMap[p.product_type] || p.product_type}</p>`;
+          }
+
+          // 원재료 (식품/화장품)
+          if (p.ingredients_text) {
+            const short = p.ingredients_text.length > 150 
+              ? p.ingredients_text.substring(0, 150) + "..." 
+              : p.ingredients_text;
+            html += `<p><strong>원재료/성분:</strong> ${short}</p>`;
+          }
+
+          // 라벨
+          if (p.labels) html += `<p><strong>라벨:</strong> ${p.labels}</p>`;
+
+          // 판매 국가
+          if (p.countries) html += `<p><strong>판매 국가:</strong> ${p.countries}</p>`;
+
+          html += `<div class="source">데이터 출처: Open Food / Beauty / Products Facts</div>`;
+          infoDiv.innerHTML = html;
+        } else {
+          // 정보를 찾지 못한 경우
+          infoDiv.innerHTML = `
+            <p>이 바코드에 대한 제품 정보를 찾을 수 없습니다.</p>
+            <p style="margin-top:8px; font-size:0.9rem; color:#94a3b8;">
+              • 데이터베이스에 아직 등록되지 않은 제품일 수 있습니다<br>
+              • 일부 전자기기·의류·의약품 등은 정보가 적을 수 있습니다
+            </p>
+          `;
+        }
+      } catch (err) {
+        console.error(err);
+        infoDiv.innerHTML = `
+          <p>제품 정보 조회 중 오류가 발생했습니다.</p>
+          <p style="font-size:0.9rem; color:#94a3b8;">인터넷 연결을 확인해 주세요.</p>
+        `;
+      }
     }
 
     function startScanner() {
@@ -165,7 +237,7 @@
 
       const config = {
         fps: 10,
-        qrbox: { width: 250, height: 150 },  // 바코드에 맞게 가로로 넓게
+        qrbox: { width: 280, height: 160 },
         aspectRatio: 1.0,
         formatsToSupport: [
           Html5QrcodeSupportedFormats.QR_CODE,
@@ -181,10 +253,10 @@
       };
 
       html5QrCode.start(
-        { facingMode: "environment" },  // 후방 카메라
+        { facingMode: "environment" },
         config,
         onScanSuccess,
-        (errorMessage) => { /* 스캔 실패는 무시 */ }
+        () => {}
       ).catch(err => {
         alert("카메라 접근에 실패했습니다.\nHTTPS 환경인지, 카메라 권한을 허용했는지 확인해 주세요.\n\n" + err);
       });
@@ -194,7 +266,6 @@
       startScanner();
     }
 
-    // 페이지 로드 시 바로 스캐너 시작
     window.addEventListener("load", () => {
       startScanner();
     });
