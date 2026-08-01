@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>바코드 스캐너</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.4rem;
+      margin-bottom: 12px;
+      color: #38bdf8;
+    }
+    #reader {
+      width: 100%;
+      max-width: 480px;
+      margin: 0 auto 16px;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #1e293b;
+    }
+    #result-box {
+      max-width: 480px;
+      margin: 0 auto;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      display: none;
+    }
+    #result-box h2 {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+      color: #4ade80;
+    }
+    .code {
+      font-size: 1.3rem;
+      font-weight: 700;
+      word-break: break-all;
+      background: #0f172a;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      color: #fbbf24;
+    }
+    .product-info {
+      line-height: 1.6;
+      font-size: 0.95rem;
+    }
+    .product-info img {
+      max-width: 120px;
+      border-radius: 8px;
+      margin: 8px 0;
+      display: block;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      max-width: 480px;
+      margin: 12px auto 0;
+      padding: 14px;
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn:active { opacity: 0.85; }
+    .hint {
+      text-align: center;
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 12px;
+    }
+    .loading {
+      text-align: center;
+      color: #94a3b8;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 바코드 / QR 스캐너</h1>
+  
+  <div id="reader"></div>
+  
+  <div id="result-box">
+    <h2>스캔 결과</h2>
+    <div class="code" id="decoded-text"></div>
+    <div id="product-info" class="product-info"></div>
+    <button class="btn" onclick="restartScanner()">다시 스캔하기</button>
+  </div>
+
+  <p class="hint">후방 카메라로 바코드를 비춰주세요<br>제품 바코드(EAN/UPC)면 정보를 자동으로 가져옵니다</p>
+
+  <script>
+    let html5QrCode;
+    let isScanning = false;
+
+    function onScanSuccess(decodedText, decodedResult) {
+      if (!isScanning) return;
+      isScanning = false;
+
+      // 스캐너 중지
+      html5QrCode.stop().then(() => {
+        document.getElementById("reader").style.display = "none";
+        document.getElementById("result-box").style.display = "block";
+        document.getElementById("decoded-text").textContent = decodedText;
+        document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
+
+        // 제품 정보 조회 (Open Food Facts - 무료)
+        fetchProductInfo(decodedText);
+      }).catch(err => console.error(err));
+    }
+
+    function fetchProductInfo(barcode) {
+      // 숫자만 있는 바코드일 때만 제품 조회 시도
+      if (!/^\d{8,14}$/.test(barcode)) {
+        document.getElementById("product-info").innerHTML = 
+          "<p>일반 텍스트/QR 코드입니다.<br>제품 정보가 없습니다.</p>";
+        return;
+      }
+
+      fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`)
+        .then(res => res.json())
+        .then(data => {
+          const infoDiv = document.getElementById("product-info");
+          if (data.status === 1 && data.product) {
+            const p = data.product;
+            let html = "";
+            if (p.image_front_small_url || p.image_url) {
+              html += `<img src="${p.image_front_small_url || p.image_url}" alt="제품 이미지">`;
+            }
+            html += `<p><strong>제품명:</strong> ${p.product_name || p.product_name_en || "정보 없음"}</p>`;
+            if (p.brands) html += `<p><strong>브랜드:</strong> ${p.brands}</p>`;
+            if (p.quantity) html += `<p><strong>용량:</strong> ${p.quantity}</p>`;
+            if (p.categories) html += `<p><strong>카테고리:</strong> ${p.categories.split(",")[0]}</p>`;
+            if (p.ingredients_text) html += `<p><strong>원재료:</strong> ${p.ingredients_text.substring(0, 120)}...</p>`;
+            infoDiv.innerHTML = html;
+          } else {
+            infoDiv.innerHTML = "<p>제품 정보를 찾을 수 없습니다.<br>(식품이 아니거나 데이터베이스에 없을 수 있어요)</p>";
+          }
+        })
+        .catch(() => {
+          document.getElementById("product-info").innerHTML = 
+            "<p>제품 정보 조회에 실패했습니다.<br>인터넷 연결을 확인해 주세요.</p>";
+        });
+    }
+
+    function startScanner() {
+      html5QrCode = new Html5Qrcode("reader");
+      isScanning = true;
+      document.getElementById("reader").style.display = "block";
+      document.getElementById("result-box").style.display = "none";
+
+      const config = {
+        fps: 10,
+        qrbox: { width: 250, height: 150 },  // 바코드에 맞게 가로로 넓게
+        aspectRatio: 1.0,
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR
+        ]
+      };
+
+      html5QrCode.start(
+        { facingMode: "environment" },  // 후방 카메라
+        config,
+        onScanSuccess,
+        (errorMessage) => { /* 스캔 실패는 무시 */ }
+      ).catch(err => {
+        alert("카메라 접근에 실패했습니다.\nHTTPS 환경인지, 카메라 권한을 허용했는지 확인해 주세요.\n\n" + err);
+      });
+    }
+
+    function restartScanner() {
+      startScanner();
+    }
+
+    // 페이지 로드 시 바로 스캐너 시작
+    window.addEventListener("load", () => {
+      startScanner();
+    });
+  </script>
+</body>
+</html>
