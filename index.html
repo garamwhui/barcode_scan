@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>바코드 스캐너 (안정 + 사진 스캔)</title>
+  <title>바코드 스캐너 (국가 검증 포함)</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -119,6 +119,16 @@
       color: #fde68a;
       line-height: 1.5;
     }
+    .warning-box {
+      background: #7f1d1d;
+      border: 1px solid #ef4444;
+      color: #fecaca;
+      padding: 12px;
+      border-radius: 8px;
+      margin-bottom: 14px;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }
     #file-input {
       display: none;
     }
@@ -129,7 +139,7 @@
 
   <div class="tip">
     <strong>작은 바코드가 잘 안 읽힐 때</strong><br>
-    → 아래 <b>「사진으로 스캔」</b> 버튼을 사용하세요<br>
+    → <b>「사진으로 스캔」</b> 버튼을 사용하세요<br>
     핸드폰 기본 카메라로 선명하게 찍은 뒤 선택하면 잘 읽힙니다
   </div>
   
@@ -142,7 +152,6 @@
     <button class="btn" id="rescanBtn">다시 스캔하기</button>
   </div>
 
-  <!-- 카메라 사용 중 버튼들 -->
   <button class="btn btn-green" id="photoBtn">사진으로 스캔 (작은 바코드 추천)</button>
   <button class="btn btn-warning" id="refocusBtn" style="display:none;">카메라 다시 시작</button>
   <button class="btn btn-secondary" id="torchBtn" style="display:none;">플래시 켜기/끄기</button>
@@ -151,7 +160,7 @@
 
   <p class="hint">
     실시간 카메라 스캔 + 사진 스캔 지원<br>
-    작은 바코드는 「사진으로 스캔」을 사용하세요
+    바코드 국가 코드와 제품 정보가 다르면 경고를 표시합니다
   </p>
 
   <script>
@@ -160,23 +169,142 @@
     let torchOn = false;
     let isBusy = false;
 
+    // 바코드 앞자리 → 국가 매핑 (주요 국가)
+    function getCountryFromBarcode(barcode) {
+      if (!barcode || barcode.length < 3) return null;
+
+      const prefix3 = barcode.substring(0, 3);
+      const prefix2 = barcode.substring(0, 2);
+
+      // 3자리 우선
+      const map3 = {
+        "880": "한국",
+        "450": "일본", "451": "일본", "452": "일본", "453": "일본", "454": "일본",
+        "455": "일본", "456": "일본", "457": "일본", "458": "일본", "459": "일본",
+        "490": "일본", "491": "일본", "492": "일본", "493": "일본", "494": "일본",
+        "495": "일본", "496": "일본", "497": "일본", "498": "일본", "499": "일본",
+        "690": "중국", "691": "중국", "692": "중국", "693": "중국", "694": "중국",
+        "695": "중국", "696": "중국", "697": "중국", "698": "중국", "699": "중국",
+        "400": "독일", "401": "독일", "402": "독일", "403": "독일", "404": "독일",
+        "405": "독일", "406": "독일", "407": "독일", "408": "독일", "409": "독일",
+        "410": "독일", "411": "독일", "412": "독일", "413": "독일", "414": "독일",
+        "415": "독일", "416": "독일", "417": "독일", "418": "독일", "419": "독일",
+        "420": "독일", "421": "독일", "422": "독일", "423": "독일", "424": "독일",
+        "425": "독일", "426": "독일", "427": "독일", "428": "독일", "429": "독일",
+        "430": "독일", "431": "독일", "432": "독일", "433": "독일", "434": "독일",
+        "435": "독일", "436": "독일", "437": "독일", "438": "독일", "439": "독일", "440": "독일",
+        "500": "영국", "501": "영국", "502": "영국", "503": "영국", "504": "영국",
+        "505": "영국", "506": "영국", "507": "영국", "508": "영국", "509": "영국",
+        "300": "프랑스", "301": "프랑스", "302": "프랑스", "303": "프랑스", "304": "프랑스",
+        "305": "프랑스", "306": "프랑스", "307": "프랑스", "308": "프랑스", "309": "프랑스",
+        "310": "프랑스", "311": "프랑스", "312": "프랑스", "313": "프랑스", "314": "프랑스",
+        "315": "프랑스", "316": "프랑스", "317": "프랑스", "318": "프랑스", "319": "프랑스",
+        "320": "프랑스", "321": "프랑스", "322": "프랑스", "323": "프랑스", "324": "프랑스",
+        "325": "프랑스", "326": "프랑스", "327": "프랑스", "328": "프랑스", "329": "프랑스",
+        "330": "프랑스", "331": "프랑스", "332": "프랑스", "333": "프랑스", "334": "프랑스",
+        "335": "프랑스", "336": "프랑스", "337": "프랑스", "338": "프랑스", "339": "프랑스",
+        "340": "프랑스", "341": "프랑스", "342": "프랑스", "343": "프랑스", "344": "프랑스",
+        "345": "프랑스", "346": "프랑스", "347": "프랑스", "348": "프랑스", "349": "프랑스",
+        "350": "프랑스", "351": "프랑스", "352": "프랑스", "353": "프랑스", "354": "프랑스",
+        "355": "프랑스", "356": "프랑스", "357": "프랑스", "358": "프랑스", "359": "프랑스",
+        "360": "프랑스", "361": "프랑스", "362": "프랑스", "363": "프랑스", "364": "프랑스",
+        "365": "프랑스", "366": "프랑스", "367": "프랑스", "368": "프랑스", "369": "프랑스",
+        "370": "프랑스", "371": "프랑스", "372": "프랑스", "373": "프랑스", "374": "프랑스",
+        "375": "프랑스", "376": "프랑스", "377": "프랑스", "378": "프랑스", "379": "프랑스",
+        "870": "네덜란드", "871": "네덜란드", "872": "네덜란드", "873": "네덜란드",
+        "874": "네덜란드", "875": "네덜란드", "876": "네덜란드", "877": "네덜란드",
+        "878": "네덜란드", "879": "네덜란드",
+        "930": "호주", "931": "호주", "932": "호주", "933": "호주", "934": "호주",
+        "935": "호주", "936": "호주", "937": "호주", "938": "호주", "939": "호주",
+        "940": "뉴질랜드", "941": "뉴질랜드", "942": "뉴질랜드", "943": "뉴질랜드",
+        "944": "뉴질랜드", "945": "뉴질랜드", "946": "뉴질랜드", "947": "뉴질랜드",
+        "948": "뉴질랜드", "949": "뉴질랜드",
+        "471": "대만",
+        "489": "홍콩",
+        "885": "태국",
+        "888": "싱가포르",
+        "893": "베트남",
+        "899": "인도네시아",
+        "628": "사우디아라비아",
+        "529": "키프로스",
+        "560": "포르투갈",
+        "590": "폴란드",
+        "594": "루마니아",
+        "599": "헝가리",
+        "600": "남아프리카",
+        "601": "남아프리카",
+        "729": "이스라엘",
+        "750": "멕시코",
+        "759": "베네수엘라",
+        "770": "콜롬비아",
+        "773": "우루과이",
+        "775": "페루",
+        "779": "아르헨티나",
+        "780": "칠레",
+        "784": "파라과이",
+        "786": "에콰도르",
+        "789": "브라질", "790": "브라질",
+        "800": "이탈리아", "801": "이탈리아", "802": "이탈리아", "803": "이탈리아",
+        "804": "이탈리아", "805": "이탈리아", "806": "이탈리아", "807": "이탈리아",
+        "808": "이탈리아", "809": "이탈리아", "810": "이탈리아", "811": "이탈리아",
+        "812": "이탈리아", "813": "이탈리아", "814": "이탈리아", "815": "이탈리아",
+        "816": "이탈리아", "817": "이탈리아", "818": "이탈리아", "819": "이탈리아",
+        "820": "이탈리아", "821": "이탈리아", "822": "이탈리아", "823": "이탈리아",
+        "824": "이탈리아", "825": "이탈리아", "826": "이탈리아", "827": "이탈리아",
+        "828": "이탈리아", "829": "이탈리아",
+        "840": "스페인", "841": "스페인", "842": "스페인", "843": "스페인",
+        "844": "스페인", "845": "스페인", "846": "스페인", "847": "스페인",
+        "848": "스페인", "849": "스페인"
+      };
+
+      if (map3[prefix3]) return map3[prefix3];
+
+      // 미국/캐나다 (0으로 시작)
+      if (barcode.startsWith("0")) return "미국/캐나다";
+
+      return "알 수 없음";
+    }
+
+    // 국가 이름이 대략 일치하는지 검사
+    function isCountryMismatch(barcodeCountry, dbCountries) {
+      if (!barcodeCountry || barcodeCountry === "알 수 없음") return false;
+      if (!dbCountries) return false;
+
+      const db = dbCountries.toLowerCase();
+      const expected = barcodeCountry.toLowerCase();
+
+      // 간단한 매칭
+      const keywords = {
+        "한국": ["korea", "south korea", "대한민국", "한국"],
+        "일본": ["japan", "일본"],
+        "중국": ["china", "중국"],
+        "미국/캐나다": ["united states", "usa", "america", "canada", "미국", "캐나다"],
+        "독일": ["germany", "독일"],
+        "영국": ["united kingdom", "uk", "great britain", "영국"],
+        "프랑스": ["france", "프랑스"],
+        "이탈리아": ["italy", "이탈리아"],
+        "스페인": ["spain", "스페인"],
+        "네덜란드": ["netherlands", "네덜란드"],
+        "호주": ["australia", "호주"],
+        "뉴질랜드": ["new zealand", "뉴질랜드"],
+        "대만": ["taiwan", "대만"],
+        "홍콩": ["hong kong", "홍콩"]
+      };
+
+      const list = keywords[barcodeCountry] || [expected];
+      for (const key of list) {
+        if (db.includes(key)) return false; // 일치함
+      }
+      return true; // 불일치
+    }
+
     // 버튼 이벤트
-    document.getElementById("rescanBtn").addEventListener("click", () => {
-      startCameraScan();
-    });
-
-    document.getElementById("refocusBtn").addEventListener("click", () => {
-      startCameraScan();
-    });
-
-    document.getElementById("torchBtn").addEventListener("click", () => {
-      toggleTorch();
-    });
-
+    document.getElementById("rescanBtn").addEventListener("click", () => startCameraScan());
+    document.getElementById("refocusBtn").addEventListener("click", () => startCameraScan());
+    document.getElementById("torchBtn").addEventListener("click", () => toggleTorch());
     document.getElementById("photoBtn").addEventListener("click", () => {
       document.getElementById("file-input").click();
     });
-
     document.getElementById("file-input").addEventListener("change", (e) => {
       if (e.target.files && e.target.files.length > 0) {
         scanFromFile(e.target.files[0]);
@@ -186,10 +314,7 @@
     function onScanSuccess(decodedText) {
       if (!isScanning) return;
       isScanning = false;
-
-      stopCamera().then(() => {
-        showResult(decodedText);
-      });
+      stopCamera().then(() => showResult(decodedText));
     }
 
     function showResult(decodedText) {
@@ -207,6 +332,7 @@
 
     async function fetchProductInfo(barcode) {
       const infoDiv = document.getElementById("product-info");
+      const barcodeCountry = getCountryFromBarcode(barcode);
 
       if (!/^\d{8,14}$/.test(barcode)) {
         infoDiv.innerHTML = "<p>일반 텍스트 또는 QR 코드입니다.<br>제품 데이터베이스에서 조회할 수 없습니다.</p>";
@@ -225,6 +351,19 @@
         if (data.status === 1 && data.product) {
           const p = data.product;
           let html = "";
+
+          // 국가 불일치 경고
+          if (isCountryMismatch(barcodeCountry, p.countries)) {
+            html += `
+              <div class="warning-box">
+                ⚠️ <strong>국가 정보가 일치하지 않습니다</strong><br>
+                바코드 등록 국가: <b>${barcodeCountry}</b><br>
+                데이터베이스 판매/등록 국가: <b>${p.countries || "정보 없음"}</b><br><br>
+                실제 제품과 다른 정보가 나왔을 수 있습니다.<br>
+                직접 확인해 주세요.
+              </div>
+            `;
+          }
 
           const img = p.image_front_small_url || p.image_url;
           if (img) {
@@ -252,6 +391,11 @@
             html += `<p><strong>유형:</strong> ${typeMap[p.product_type] || p.product_type}</p>`;
           }
 
+          // 바코드 등록 국가 표시
+          html += `<p><strong>바코드 등록 국가:</strong> ${barcodeCountry}</p>`;
+
+          if (p.countries) html += `<p><strong>DB 판매/등록 국가:</strong> ${p.countries}</p>`;
+
           if (p.ingredients_text) {
             const short = p.ingredients_text.length > 150 
               ? p.ingredients_text.substring(0, 150) + "..." 
@@ -260,7 +404,6 @@
           }
 
           if (p.labels) html += `<p><strong>라벨:</strong> ${p.labels}</p>`;
-          if (p.countries) html += `<p><strong>판매 국가:</strong> ${p.countries}</p>`;
 
           html += `<div class="source">데이터 출처: Open Food / Beauty / Products Facts</div>`;
           infoDiv.innerHTML = html;
@@ -268,6 +411,7 @@
           infoDiv.innerHTML = `
             <p>이 바코드에 대한 제품 정보를 찾을 수 없습니다.</p>
             <p style="margin-top:8px; font-size:0.9rem; color:#94a3b8;">
+              바코드 등록 국가: <b>${barcodeCountry}</b><br><br>
               • 데이터베이스에 아직 등록되지 않은 제품일 수 있습니다<br>
               • 일부 전자기기·의류·의약품 등은 정보가 적을 수 있습니다
             </p>
@@ -282,7 +426,6 @@
       }
     }
 
-    // 카메라 완전히 중지
     function stopCamera() {
       return new Promise((resolve) => {
         if (!html5QrCode) {
@@ -290,7 +433,6 @@
           resolve();
           return;
         }
-
         html5QrCode.stop()
           .then(() => {
             try { html5QrCode.clear(); } catch(e) {}
@@ -307,16 +449,13 @@
       });
     }
 
-    // 실시간 카메라 스캔 시작
     async function startCameraScan() {
       if (isBusy) return;
       isBusy = true;
 
       try {
-        // 기존 카메라 종료
         await stopCamera();
 
-        // UI 초기화
         document.getElementById("reader").innerHTML = "";
         document.getElementById("reader").style.display = "block";
         document.getElementById("result-box").style.display = "none";
@@ -325,7 +464,6 @@
         document.getElementById("torchBtn").style.display = "none";
         torchOn = false;
 
-        // 카메라 리소스 해제 대기 (중요)
         await new Promise(r => setTimeout(r, 500));
 
         html5QrCode = new Html5Qrcode("reader");
@@ -352,7 +490,6 @@
           () => {}
         );
 
-        // 플래시 지원 확인
         setTimeout(() => {
           try {
             const caps = html5QrCode.getRunningTrackCameraCapabilities();
@@ -371,7 +508,6 @@
       isBusy = false;
     }
 
-    // 사진 파일로 스캔 (작은 바코드에 효과적)
     async function scanFromFile(file) {
       if (isBusy) return;
       isBusy = true;
@@ -387,12 +523,9 @@
         document.getElementById("decoded-text").textContent = "사진 분석 중...";
         document.getElementById("product-info").innerHTML = '<div class="loading">바코드를 읽는 중입니다...</div>';
 
-        // 파일 스캔용 임시 인스턴스
         const fileScanner = new Html5Qrcode("reader");
-        
         const decodedText = await fileScanner.scanFile(file, true);
         
-        // 성공
         document.getElementById("decoded-text").textContent = decodedText;
         document.getElementById("product-info").innerHTML = '<div class="loading">제품 정보 조회 중...</div>';
         fetchProductInfo(decodedText);
@@ -404,13 +537,11 @@
           <p>사진에서 바코드를 찾지 못했습니다.</p>
           <p style="margin-top:8px; font-size:0.9rem; color:#94a3b8;">
             • 바코드가 선명하게 나오도록 가까이서 찍어주세요<br>
-            • 빛이 충분한 곳에서 찍어주세요<br>
-            • 바코드가 기울어지지 않게 찍어주세요
+            • 빛이 충분한 곳에서 찍어주세요
           </p>
         `;
       }
 
-      // 파일 input 초기화 (같은 파일 다시 선택 가능하도록)
       document.getElementById("file-input").value = "";
       isBusy = false;
     }
@@ -428,7 +559,6 @@
       }
     }
 
-    // 페이지 로드 시 카메라 시작
     window.addEventListener("load", () => {
       startCameraScan();
     });
