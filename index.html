@@ -365,7 +365,7 @@
 
     document.getElementById("daisoBtn").addEventListener("click", () => {
       if (!currentBarcode) return;
-      window.open(`https://www.daisomall.co.kr/search?search_word=${encodeURIComponent(currentBarcode)}`, "_blank");
+      window.open(`https://www.daisomall.co.kr/ds/dst/SCR_DST_0015?searchTerm=${encodeURIComponent(currentBarcode)}`, "_blank");
     });
 
     document.getElementById("naverBtn").addEventListener("click", () => {
