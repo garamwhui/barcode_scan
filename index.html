@@ -294,17 +294,46 @@
       return true;
     }
 
-    // URL인지 확인해서 링크로 만들기
-    function formatDecodedText(text) {
-      const urlPattern = /^(https?:\/\/[^\s]+)/i;
-      if (urlPattern.test(text.trim())) {
-        const url = text.trim();
-        return `<a href="\( {url}" target="_blank" rel="noopener noreferrer"> \){url}</a>`;
-      }
-      // 텍스트 안에 URL이 포함된 경우
-      return text.replace(/(https?:\/\/[^\s]+)/gi, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-    }
+    // URL을 안전하게 링크로 만들기
+function formatDecodedText(text) {
+  if (!text) return "";
 
+  const trimmed = text.trim();
+
+  // HTML 특수문자 이스케이프 (표시용)
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  // 전체가 URL인 경우
+  const fullUrlPattern = /^(https?:\/\/\S+)$/i;
+  if (fullUrlPattern.test(trimmed)) {
+    const safeDisplay = escapeHtml(trimmed);
+    // href에는 원본 URL을 그대로 사용 (브라우저가 처리)
+    return `<a href="\( {trimmed.replace(/"/g, "&quot;")}" target="_blank" rel="noopener noreferrer"> \){safeDisplay}</a>`;
+  }
+
+  // 텍스트 안에 URL이 포함된 경우
+  return escapeHtml(trimmed).replace(
+    /(https?:\/\/[^\s<]+)/gi,
+    (url) => {
+      // escapeHtml 된 상태에서 &amp; 등이 들어있을 수 있으므로
+      // 원본에 가깝게 복원해서 href에 넣기
+      const originalUrl = url
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'");
+      return `<a href="\( {originalUrl.replace(/"/g, "&quot;")}" target="_blank" rel="noopener noreferrer"> \){url}</a>`;
+    }
+  );
+}
     // 토스트 메시지
     function showToast(msg) {
       const t = document.getElementById("toast");
