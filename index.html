@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>바코드 스캐너 (모든 제품)</title>
+  <title>바코드 스캐너 (고해상도 + 모든 제품)</title>
   <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -114,7 +114,7 @@
   <p class="hint">
     후방 카메라로 바코드를 비춰주세요<br>
     식품 · 화장품 · 생활용품 · 반려동물용품 등<br>
-    가능한 많은 제품 정보를 자동으로 찾아줍니다
+    고해상도로 작은 바코드도 잘 읽습니다
   </p>
 
   <script>
@@ -146,7 +146,6 @@
 
       try {
         // Open Food Facts 계열 통합 API (식품 + 화장품 + 일반제품 + 반려동물용품)
-        // product_type=all 로 모든 카테고리 검색
         const url = `https://world.openfoodfacts.org/api/v2/product/${barcode}?product_type=all&fields=product_name,product_name_en,brands,quantity,categories,ingredients_text,image_front_small_url,image_url,product_type,countries,labels`;
         
         const res = await fetch(url, {
@@ -194,7 +193,7 @@
             html += `<p><strong>유형:</strong> ${typeMap[p.product_type] || p.product_type}</p>`;
           }
 
-          // 원재료 (식품/화장품)
+          // 원재료/성분
           if (p.ingredients_text) {
             const short = p.ingredients_text.length > 150 
               ? p.ingredients_text.substring(0, 150) + "..." 
@@ -211,7 +210,6 @@
           html += `<div class="source">데이터 출처: Open Food / Beauty / Products Facts</div>`;
           infoDiv.innerHTML = html;
         } else {
-          // 정보를 찾지 못한 경우
           infoDiv.innerHTML = `
             <p>이 바코드에 대한 제품 정보를 찾을 수 없습니다.</p>
             <p style="margin-top:8px; font-size:0.9rem; color:#94a3b8;">
@@ -235,21 +233,23 @@
       document.getElementById("reader").style.display = "block";
       document.getElementById("result-box").style.display = "none";
 
+      // 고해상도 + 선명도 최적화 설정
       const config = {
-        fps: 10,
-        qrbox: { width: 280, height: 160 },
-        aspectRatio: 1.0,
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.EAN_8,
-          Html5QrcodeSupportedFormats.UPC_A,
-          Html5QrcodeSupportedFormats.UPC_E,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.ITF,
-          Html5QrcodeSupportedFormats.CODABAR
-        ]
+        fps: 15,
+        qrbox: { width: 300, height: 180 },
+        aspectRatio: 1.777,
+        disableFlip: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        },
+        videoConstraints: {
+          facingMode: "environment",
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          advanced: [
+            { focusMode: "continuous" }
+          ]
+        }
       };
 
       html5QrCode.start(
@@ -258,7 +258,23 @@
         onScanSuccess,
         () => {}
       ).catch(err => {
-        alert("카메라 접근에 실패했습니다.\nHTTPS 환경인지, 카메라 권한을 허용했는지 확인해 주세요.\n\n" + err);
+        // 고해상도 실패 시 기본 설정으로 재시도
+        console.warn("고해상도 실패, 기본 설정으로 재시도:", err);
+        
+        const fallbackConfig = {
+          fps: 12,
+          qrbox: { width: 280, height: 160 },
+          aspectRatio: 1.0
+        };
+
+        html5QrCode.start(
+          { facingMode: "environment" },
+          fallbackConfig,
+          onScanSuccess,
+          () => {}
+        ).catch(err2 => {
+          alert("카메라 접근에 실패했습니다.\nHTTPS 환경인지, 카메라 권한을 허용했는지 확인해 주세요.\n\n" + err2);
+        });
       });
     }
 
